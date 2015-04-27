@@ -3,17 +3,18 @@ package documents
 import (
 	"encoding/json"
 	"errors"
-	"github.com/emicklei/go-restful"
-	. "github.com/emicklei/mora/api/response"
-	"github.com/emicklei/mora/session"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
-	"github.com/compose/mejson"
 	"log"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/compose/mejson"
+	. "github.com/denkhaus/mora/api/response"
+	"github.com/denkhaus/mora/session"
+	"github.com/emicklei/go-restful"
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 )
 
 type Resource struct {
