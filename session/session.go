@@ -2,19 +2,21 @@ package session
 
 import (
 	"errors"
-	"github.com/emicklei/goproperties"
-	"gopkg.in/mgo.v2"
 	"log"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/emicklei/goproperties"
+	"gopkg.in/mgo.v2"
 )
 
 // MongoDB Session Manager
 type SessionManager struct {
 	configMap  map[string]properties.Properties
 	sessions   map[string]*mgo.Session
+	allowedDbs map[string][]string
 	accessLock *sync.RWMutex
 }
 
@@ -24,6 +26,7 @@ func NewSessionManager(props properties.Properties) *SessionManager {
 	sess := &SessionManager{
 		configMap:  make(map[string]properties.Properties),
 		sessions:   make(map[string]*mgo.Session),
+		allowedDbs: make(map[string][]string),
 		accessLock: &sync.RWMutex{},
 	}
 	sess.SetConfig(props)
@@ -135,7 +138,17 @@ func (s *SessionManager) SetConfig(props properties.Properties) {
 			config["alias"] = alias
 			s.configMap[alias] = config
 		}
-		config[parts[2]] = v
+
+		if parts[2] == "allowdbs" {
+			dbs := strings.Split(v, ",")
+			for idx, t := range dbs {
+				dbs[idx] = strings.Trim(t, " ")
+			}
+
+			s.allowedDbs[alias] = dbs
+		} else {
+			config[parts[2]] = v
+		}
 	}
 }
 
@@ -145,6 +158,20 @@ func (s *SessionManager) GetConfig(alias string) (properties.Properties, error) 
 		return config, nil
 	}
 	return nil, errors.New("Unknown alias: " + alias)
+}
+
+// Is database publishable, by alias and database name. If no info is available,
+// allow all databases.
+func (s *SessionManager) IsDatabaseAllowed(alias, database string) bool {
+	if val, ok := s.allowedDbs[alias]; ok {
+		for _, db := range val {
+			if database == db {
+				return true
+			}
+		}
+		return false
+	}
+	return true
 }
 
 // Log wrapper

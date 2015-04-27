@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"path/filepath"
 
+	"github.com/denkhaus/mora/api/documents"
+	"github.com/denkhaus/mora/api/statistics"
+	"github.com/denkhaus/mora/session"
 	"github.com/emicklei/go-restful"
 	"github.com/emicklei/go-restful/swagger"
 	properties "github.com/emicklei/goproperties"
-	"github.com/emicklei/mora/api/documents"
-	"github.com/emicklei/mora/api/statistics"
-	"github.com/emicklei/mora/session"
 )
 
 var (

@@ -3,17 +3,23 @@ package documents
 import (
 	"encoding/json"
 	"errors"
-	"github.com/emicklei/go-restful"
-	. "github.com/emicklei/mora/api/response"
-	"github.com/emicklei/mora/session"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
-	"github.com/compose/mejson"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/compose/mejson"
+	. "github.com/denkhaus/mora/api/response"
+	"github.com/denkhaus/mora/session"
+	"github.com/emicklei/go-restful"
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
+)
+
+var (
+	errResourceNotAvailable = fmt.Errorf("resource not available")
 )
 
 type Resource struct {
@@ -59,16 +65,20 @@ func (d *Resource) AliasDatabasesHandler(req *restful.Request, resp *restful.Res
 		return
 	}
 
+	// Restrict the allowed databases by config
+	filteredNames := d.restrictDatabases(alias, names)
+
 	// Write response back to client
-	WriteResponse(names, resp)
+	WriteResponse(filteredNames, resp)
 }
 
 //
 // Returns all collections in database
 //
 func (d *Resource) DatabaseCollectionsHandler(req *restful.Request, resp *restful.Response) {
+	alias := getParam("alias", req)
 	// Mongo session
-	session, needclose, err := d.SessMng.Get(getParam("alias", req))
+	session, needclose, err := d.SessMng.Get(alias)
 	if err != nil {
 		WriteError(err, resp)
 		return
@@ -79,6 +89,10 @@ func (d *Resource) DatabaseCollectionsHandler(req *restful.Request, resp *restfu
 
 	// Database request parameter
 	dbname := getParam("database", req)
+	if !d.SessMng.IsDatabaseAllowed(alias, dbname) {
+		WriteStatusError(http.StatusBadRequest, errResourceNotAvailable, resp)
+		return
+	}
 
 	// Get collections from database
 	collections, err := session.DB(dbname).CollectionNames()
@@ -123,8 +137,9 @@ func (d *Resource) CollectionUpdateHandler(req *restful.Request, resp *restful.R
 		return
 	}
 
+	alias := getParam("alias", req)
 	// Mongo session
-	session, needclose, err := d.SessMng.Get(getParam("alias", req))
+	session, needclose, err := d.SessMng.Get(alias)
 	if err != nil {
 		WriteError(err, resp)
 		return
@@ -136,7 +151,11 @@ func (d *Resource) CollectionUpdateHandler(req *restful.Request, resp *restful.R
 	}
 
 	// Mongo Collection
-	col := d.GetMongoCollection(req, session)
+	col, err := d.GetMongoCollection(alias, req, session)
+	if err != nil {
+		WriteStatusError(http.StatusBadRequest, err, resp)
+		return
+	}
 
 	// Compose a selector from request
 	selector, one, err := getSelector(req)
@@ -260,8 +279,10 @@ func (d *Resource) handleInsert(col *mgo.Collection, selector, document bson.M, 
 // Finds document(/s) in collection
 //
 func (d *Resource) CollectionFindHandler(req *restful.Request, resp *restful.Response) {
+
+	alias := getParam("alias", req)
 	// Mongo session
-	session, needclose, err := d.SessMng.Get(getParam("alias", req))
+	session, needclose, err := d.SessMng.Get(alias)
 	if err != nil {
 		WriteError(err, resp)
 		return
@@ -273,7 +294,11 @@ func (d *Resource) CollectionFindHandler(req *restful.Request, resp *restful.Res
 	}
 
 	// Mongo Collection
-	col := d.GetMongoCollection(req, session)
+	col, err := d.GetMongoCollection(alias, req, session)
+	if err != nil {
+		WriteStatusError(http.StatusBadRequest, err, resp)
+		return
+	}
 
 	// Compose a query from request
 	query, one, err := d.ComposeQuery(col, req)
@@ -363,8 +388,10 @@ func (d *Resource) CollectionFindHandler(req *restful.Request, resp *restful.Res
 // Removes document(/s) from collection
 //
 func (d *Resource) CollectionRemoveHandler(req *restful.Request, resp *restful.Response) {
+	alias := getParam("alias", req)
+
 	// Mongo session
-	session, needclose, err := d.SessMng.Get(getParam("alias", req))
+	session, needclose, err := d.SessMng.Get(alias)
 	if err != nil {
 		WriteError(err, resp)
 		return
@@ -376,7 +403,11 @@ func (d *Resource) CollectionRemoveHandler(req *restful.Request, resp *restful.R
 	}
 
 	// Mongo Collection
-	col := d.GetMongoCollection(req, session)
+	col, err := d.GetMongoCollection(alias, req, session)
+	if err != nil {
+		WriteStatusError(http.StatusBadRequest, err, resp)
+		return
+	}
 
 	// Compose a selector from request
 	// Get selector from `_id` path parameter and `query` query parameter
@@ -516,8 +547,25 @@ func (d *Resource) collectionurl(next bool, req *restful.Request) string {
 	return uri.String()
 }
 
-func (d *Resource) GetMongoCollection(req *restful.Request, session *mgo.Session) *mgo.Collection {
-	return session.DB(getParam("database", req)).C(req.PathParameter("collection"))
+func (d *Resource) restrictDatabases(alias string, names []string) []string {
+	allowedDbs := make([]string, 0)
+	for _, n := range names {
+		if d.SessMng.IsDatabaseAllowed(alias, n) {
+			allowedDbs = append(allowedDbs, n)
+		}
+	}
+
+	return allowedDbs
+}
+
+func (d *Resource) GetMongoCollection(alias string, req *restful.Request, session *mgo.Session) (*mgo.Collection, error) {
+	db := getParam("database", req)
+	if !d.SessMng.IsDatabaseAllowed(alias, db) {
+		return nil, errResourceNotAvailable
+	}
+
+	coll := req.PathParameter("collection")
+	return session.DB(db).C(coll), nil
 }
 
 func getFields(req *restful.Request) bson.M {

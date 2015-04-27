@@ -1,8 +1,8 @@
 package statistics
 
 import (
+	"github.com/denkhaus/mora/session"
 	"github.com/emicklei/go-restful"
-	"github.com/emicklei/mora/session"
 )
 
 // Creates and adds Statistics Resource to container

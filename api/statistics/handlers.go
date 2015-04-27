@@ -2,9 +2,10 @@ package statistics
 
 import (
 	"fmt"
+
+	. "github.com/denkhaus/mora/api/response"
+	"github.com/denkhaus/mora/session"
 	"github.com/emicklei/go-restful"
-	. "github.com/emicklei/mora/api/response"
-	"github.com/emicklei/mora/session"
 	"gopkg.in/mgo.v2/bson"
 )
 
