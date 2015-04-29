@@ -568,7 +568,13 @@ func getSelector(req *restful.Request) (selector bson.M, one bool, err error) {
 		if bson.IsObjectIdHex(selid) {
 			selector[ParamID] = bson.ObjectIdHex(selid)
 		} else {
-			selector[ParamID] = selid
+			// If id is an Integer convert to int.
+			if intId, err := strconv.Atoi(selid); err == nil {
+				selector[ParamID] = intId
+			} else {
+				// id is simple string
+				selector[ParamID] = selid
+			}
 		}
 		one = true
 	}
